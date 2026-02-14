@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>fractalyze PyPI</title>
+    <style>
+      body { font-family: monospace; max-width: 600px; margin: 40px auto; padding: 0 20px; }
+      h1 { font-size: 1.4em; }
+      code { background: #f4f4f4; padding: 2px 6px; }
+      pre { background: #f4f4f4; padding: 12px; overflow-x: auto; }
+    </style>
+  </head>
+  <body>
+    <h1>fractalyze PyPI</h1>
+    <p>Private package index for <a href="https://github.com/fractalyze">fractalyze</a> projects.</p>
+
+    <h2>Packages</h2>
+    <ul>
+      <li><a href="simple/jax/">jax</a></li>
+      <li><a href="simple/jaxlib/">jaxlib</a></li>
+    </ul>
+
+    <h2>Usage</h2>
+    <pre>pip install --index-url https://fractalyze.github.io/pypi/simple/ \
+  --extra-index-url https://pypi.org/simple/ \
+  jax</pre>
+  </body>
+</html>
