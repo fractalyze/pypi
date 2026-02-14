@@ -1,5 +1,7 @@
 {
   "packages": [
-    {"name": "zk-dtypes", "repo": "fractalyze/zk_dtypes"}
+    {"name": "zk-dtypes", "repo": "fractalyze/zk_dtypes"},
+    {"name": "jax", "repo": "fractalyze/jax"},
+    {"name": "jaxlib", "repo": "fractalyze/jax"}
   ]
 }

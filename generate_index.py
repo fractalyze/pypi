@@ -42,16 +42,23 @@ def gh_api(endpoint: str):
     return json.loads(result.stdout)
 
 
-def get_wheel_assets(repo: str) -> list[dict]:
-    """Get all .whl assets from all releases of a repo."""
+def get_wheel_assets(repo: str, package_name: str) -> list[dict]:
+    """Get .whl assets matching package_name from all releases of a repo.
+
+    Filters by wheel filename prefix to support multiple packages from
+    one repo (e.g. jax and jaxlib both come from fractalyze/jax).
+    """
+    normalized = normalize_name(package_name)
+    prefix = normalized.replace("-", "_") + "-"
     releases = gh_api(f"repos/{repo}/releases")
     wheels = []
     for release in releases:
         tag = release["tag_name"]
         for asset in release.get("assets", []):
-            if asset["name"].endswith(".whl"):
+            name = asset["name"]
+            if name.endswith(".whl") and name.startswith(prefix):
                 wheels.append({
-                    "filename": asset["name"],
+                    "filename": name,
                     "url": asset["browser_download_url"],
                     "tag": tag,
                 })
@@ -113,7 +120,7 @@ def main():
     package_names = []
 
     for pkg in config["packages"]:
-        wheels = get_wheel_assets(pkg["repo"])
+        wheels = get_wheel_assets(pkg["repo"], pkg["name"])
         if wheels:
             package_names.append(pkg["name"])
             generate_package_index(pkg["name"], wheels, channel_dir)
