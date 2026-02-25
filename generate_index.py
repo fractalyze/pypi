@@ -28,6 +28,7 @@ Uses two tokens:
 import json
 import os
 import re
+import shutil
 import subprocess
 import tempfile
 from pathlib import Path
@@ -250,6 +251,7 @@ def main():
             generate_package_index(pkg["name"], wheels, channel_dir)
 
     generate_root_index(package_names, channel_dir)
+    shutil.copy("static/index.html", site_dir / "index.html")
     (site_dir / ".nojekyll").touch()
     print(f"Generated index for {len(package_names)} packages")
 
