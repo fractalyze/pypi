@@ -2,6 +2,7 @@
   "packages": [
     {"name": "jax", "repo": "fractalyze/jax"},
     {"name": "jaxlib", "repo": "fractalyze/jax"},
+    {"name": "zkx-cuda-pjrt", "repo": "fractalyze/jax"},
     {"name": "zkbench", "repo": "fractalyze/zkbench-py"}
   ]
 }
