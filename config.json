@@ -1,6 +1,7 @@
 {
   "packages": [
     {"name": "jax", "repo": "fractalyze/jax"},
+    {"name": "jax-cuda12-plugin", "repo": "fractalyze/jax"},
     {"name": "jaxlib", "repo": "fractalyze/jax"},
     {"name": "riscv-witness", "repo": "fractalyze/riscv-witness"},
     {"name": "zkx-cuda-pjrt", "repo": "fractalyze/jax"},
