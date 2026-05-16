@@ -4,6 +4,7 @@
     {"name": "jax-cuda12-plugin", "repo": "fractalyze/jax"},
     {"name": "jaxlib", "repo": "fractalyze/jax"},
     {"name": "riscv-witness", "repo": "fractalyze/riscv-witness"},
+    {"name": "whir-zorch", "repo": "fractalyze/whir-zorch"},
     {"name": "zkx-cuda-pjrt", "repo": "fractalyze/jax"},
     {"name": "zkbench", "repo": "fractalyze/zkbench-py"}
   ]
