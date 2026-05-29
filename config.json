@@ -1,6 +1,7 @@
 {
   "packages": [
     {"name": "jax", "repo": "fractalyze/jax"},
+    {"name": "jax-cuda12-pjrt", "repo": "fractalyze/jax_fork"},
     {"name": "jax-cuda12-plugin", "repo": "fractalyze/jax"},
     {"name": "jax-rocm7-pjrt", "repo": "fractalyze/jax_fork"},
     {"name": "jax-rocm7-plugin", "repo": "fractalyze/jax_fork"},
