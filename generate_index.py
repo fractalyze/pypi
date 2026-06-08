@@ -155,12 +155,18 @@ def core_metadata_value(sidecar_asset: dict | None) -> str | None:
     return "true"
 
 
-def mirror_repo_wheels(repo: str) -> None:
+def mirror_repo_wheels(repo: str, mirrored_anywhere: set[str]) -> None:
     """Mirror all wheel assets from a source repo to pypi repo releases.
 
     For each source release, creates a corresponding release on the pypi
     repo with tag ``<repo-name>-<source-tag>`` and uploads all .whl
     assets.  Already-mirrored wheels are skipped (idempotent).
+
+    ``mirrored_anywhere`` is the set of wheel filenames already mirrored under
+    any pypi tag; it is fetched once by the caller and updated in place here so
+    each version-stamped wheel is mirrored exactly once across every repo (a
+    stale-wheel upload bug can attach the same wheel to many source releases,
+    and re-mirroring every copy is what stalls the rebuild).
 
     Uses FRACTALYZE_REPOS_READ_TOKEN for source repo access and
     GH_TOKEN (GITHUB_TOKEN) for pypi repo writes.
@@ -184,6 +190,11 @@ def mirror_repo_wheels(repo: str) -> None:
             a for a in release.get("assets", [])
             if a["name"].endswith(".whl")
         ]
+        if not wheels:
+            continue
+
+        # Dedup by filename: skip wheels already mirrored under any pypi tag.
+        wheels = [w for w in wheels if w["name"] not in mirrored_anywhere]
         if not wheels:
             continue
 
@@ -281,6 +292,7 @@ def mirror_repo_wheels(repo: str) -> None:
                         ],
                         check=True,
                     )
+                    mirrored_anywhere.add(name)
                 if name in s3_wheel:
                     s3_upload(wheel_path, s3_key(pypi_tag, name))
 
@@ -406,13 +418,19 @@ def main():
     site_dir = Path("site")
     channel_dir = site_dir / "simple"
 
-    # Phase 1: Mirror wheels from all source repos to pypi releases.
+    # Phase 1: Mirror wheels from all source repos to pypi releases. Fetch the
+    # already-mirrored wheel filenames once (not per repo) and update in place.
+    mirrored_anywhere = {
+        a["name"]
+        for r in gh_api(f"repos/{PYPI_REPO}/releases")
+        for a in r.get("assets", [])
+    }
     mirrored_repos: set[str] = set()
     for pkg in config["packages"]:
         repo = pkg["repo"]
         if repo not in mirrored_repos:
             print(f"Mirroring wheels from {repo}...")
-            mirror_repo_wheels(repo)
+            mirror_repo_wheels(repo, mirrored_anywhere)
             mirrored_repos.add(repo)
 
     # Phase 2: Generate PEP 503 index from pypi repo releases.
