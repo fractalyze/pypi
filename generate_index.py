@@ -172,6 +172,15 @@ def mirror_repo_wheels(repo: str) -> None:
         f"repos/{repo}/releases", token_env=SOURCE_TOKEN_ENV
     )
 
+    # Wheel filenames are version-stamped (globally unique), so mirror each once.
+    # A stale-wheel upload bug can attach the same wheel to many source releases;
+    # re-mirroring every copy is what stalls the rebuild.
+    mirrored_anywhere = {
+        a["name"]
+        for r in gh_api(f"repos/{PYPI_REPO}/releases")
+        for a in r.get("assets", [])
+    }
+
     # gh returns releases newest-first, so the first BACKFILL_LAST are the most
     # recent — the only ones that get sidecars + S3 copies (see BACKFILL_LAST).
     for idx, release in enumerate(source_releases):
@@ -184,6 +193,11 @@ def mirror_repo_wheels(repo: str) -> None:
             a for a in release.get("assets", [])
             if a["name"].endswith(".whl")
         ]
+        if not wheels:
+            continue
+
+        # Dedup by filename: skip wheels already mirrored under any pypi tag.
+        wheels = [w for w in wheels if w["name"] not in mirrored_anywhere]
         if not wheels:
             continue
 
@@ -281,6 +295,7 @@ def mirror_repo_wheels(repo: str) -> None:
                         ],
                         check=True,
                     )
+                    mirrored_anywhere.add(name)
                 if name in s3_wheel:
                     s3_upload(wheel_path, s3_key(pypi_tag, name))
 
