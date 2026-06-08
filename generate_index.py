@@ -31,11 +31,23 @@ import re
 import shutil
 import subprocess
 import tempfile
+import zipfile
 from pathlib import Path
 from urllib.parse import quote
 
 PYPI_REPO = "fractalyze/pypi"
 SOURCE_TOKEN_ENV = "FRACTALYZE_REPOS_READ_TOKEN"
+
+# Optional object-store hosting for wheel bytes. When PYPI_WHEELS_BUCKET is set,
+# wheels and their .metadata sidecars are uploaded to that S3 bucket and the
+# index emits the bucket URL as each href, keeping consumers off the github
+# release-asset CDN (which intermittently 504s on the large wheels). When unset,
+# hrefs point at the github release assets as before, so the index keeps working
+# until the bucket is provisioned. The github release mirror happens either way:
+# it is the enumeration source and a durable backup, never hit by consumers once
+# S3 hosting is on.
+S3_BUCKET = os.environ.get("PYPI_WHEELS_BUCKET")
+S3_BASE_URL = (os.environ.get("PYPI_WHEELS_BASE_URL") or "").rstrip("/")
 
 
 def _make_env(token_env: str) -> dict[str, str]:
@@ -73,6 +85,64 @@ def gh_api_get(endpoint: str, *, token_env: str = "GH_TOKEN"):
     if result.returncode != 0:
         return None
     return json.loads(result.stdout)
+
+
+def s3_key(pypi_tag: str, name: str) -> str:
+    """Bucket key for an asset, namespaced by mirror tag to avoid collisions."""
+    return f"{pypi_tag}/{name}"
+
+
+def s3_object_exists(key: str) -> bool:
+    """True if *key* already exists in the wheels bucket (idempotency check)."""
+    result = subprocess.run(
+        ["aws", "s3api", "head-object", "--bucket", S3_BUCKET, "--key", key],
+        capture_output=True,
+        text=True,
+    )
+    return result.returncode == 0
+
+
+def s3_upload(local_path: Path, key: str) -> None:
+    """Upload *local_path* to the wheels bucket at *key*."""
+    subprocess.run(
+        ["aws", "s3", "cp", str(local_path), f"s3://{S3_BUCKET}/{key}"],
+        check=True,
+    )
+
+
+_METADATA_MEMBER = re.compile(r"^[^/]+\.dist-info/METADATA$")
+
+
+def extract_metadata_sidecar(wheel_path: Path) -> Path | None:
+    """Write a PEP 658 ``<wheel>.metadata`` sidecar next to *wheel_path*.
+
+    Reads ``*.dist-info/METADATA`` from the wheel zip and writes those bytes
+    verbatim as ``<wheel>.metadata``. Returns the sidecar path, or None if
+    the wheel carries no top-level ``dist-info/METADATA`` member.
+    """
+    with zipfile.ZipFile(wheel_path) as zf:
+        members = [n for n in zf.namelist() if _METADATA_MEMBER.match(n)]
+        if not members:
+            return None
+        data = zf.read(members[0])
+    sidecar = wheel_path.with_name(wheel_path.name + ".metadata")
+    sidecar.write_bytes(data)
+    return sidecar
+
+
+def core_metadata_value(sidecar_asset: dict | None) -> str | None:
+    """PEP 714 ``data-core-metadata`` value for a ``.metadata`` sidecar asset.
+
+    Returns ``sha256=<hex>`` when GitHub reports a sha256 digest on the asset,
+    ``true`` when the sidecar exists without a usable digest, or None when no
+    sidecar asset is present.
+    """
+    if sidecar_asset is None:
+        return None
+    digest = sidecar_asset.get("digest") or ""
+    if digest.startswith("sha256:"):
+        return f"sha256={digest.split(':', 1)[1]}"
+    return "true"
 
 
 def mirror_repo_wheels(repo: str) -> None:
@@ -114,9 +184,38 @@ def mirror_repo_wheels(repo: str) -> None:
                 a["name"] for a in pypi_release.get("assets", [])
             }
 
-        to_upload = [w for w in wheels if w["name"] not in existing_names]
-        if not to_upload:
-            print(f"  {pypi_tag}: all {len(wheels)} wheels already mirrored")
+        # Each mirrored wheel needs two assets: the wheel itself and its
+        # PEP 658 ``<wheel>.metadata`` sidecar. They are tracked
+        # independently because a wheel mirrored before sidecars existed has
+        # the wheel but no sidecar — that case backfills the sidecar alone.
+        upload_wheel = {
+            w["name"] for w in wheels if w["name"] not in existing_names
+        }
+        upload_meta = {
+            w["name"] for w in wheels
+            if f"{w['name']}.metadata" not in existing_names
+        }
+        # When S3 hosting is on, the bucket needs the same two objects. A wheel
+        # already on github may still be absent from S3 (e.g. first rollout), so
+        # check the bucket independently of the github asset listing.
+        s3_wheel: set[str] = set()
+        s3_meta: set[str] = set()
+        if S3_BUCKET:
+            s3_wheel = {
+                w["name"] for w in wheels
+                if not s3_object_exists(s3_key(pypi_tag, w["name"]))
+            }
+            s3_meta = {
+                w["name"] for w in wheels
+                if not s3_object_exists(s3_key(pypi_tag, f"{w['name']}.metadata"))
+            }
+        # Extracting METADATA needs the wheel bytes, so any wheel missing any
+        # target (github or S3, wheel or sidecar) is downloaded once and reused.
+        to_download = sorted(upload_wheel | upload_meta | s3_wheel | s3_meta)
+        if not to_download:
+            print(
+                f"  {pypi_tag}: all {len(wheels)} wheels + sidecars present"
+            )
             continue
 
         # Create the pypi release if it does not exist yet.
@@ -135,8 +234,7 @@ def mirror_repo_wheels(repo: str) -> None:
         # Download from source (read token) and upload to pypi (write token).
         source_env = _make_env(SOURCE_TOKEN_ENV)
         with tempfile.TemporaryDirectory() as tmp:
-            for asset in to_upload:
-                name = asset["name"]
+            for name in to_download:
                 print(f"  Mirroring: {name} -> {pypi_tag}")
 
                 subprocess.run(
@@ -149,19 +247,52 @@ def mirror_repo_wheels(repo: str) -> None:
                     check=True,
                     env=source_env,
                 )
-                subprocess.run(
-                    [
-                        "gh", "release", "upload", pypi_tag,
-                        str(Path(tmp) / name),
-                        "--repo", PYPI_REPO,
-                        "--clobber",
-                    ],
-                    check=True,
-                )
+                wheel_path = Path(tmp) / name
+
+                if name in upload_wheel:
+                    subprocess.run(
+                        [
+                            "gh", "release", "upload", pypi_tag,
+                            str(wheel_path),
+                            "--repo", PYPI_REPO,
+                            "--clobber",
+                        ],
+                        check=True,
+                    )
+                if name in s3_wheel:
+                    s3_upload(wheel_path, s3_key(pypi_tag, name))
+
+                if name in upload_meta or name in s3_meta:
+                    sidecar = extract_metadata_sidecar(wheel_path)
+                    if sidecar is None:
+                        print(
+                            f"    WARNING: no dist-info/METADATA in {name}; "
+                            "skipping PEP 658 sidecar"
+                        )
+                        continue
+                    if name in upload_meta:
+                        subprocess.run(
+                            [
+                                "gh", "release", "upload", pypi_tag,
+                                str(sidecar),
+                                "--repo", PYPI_REPO,
+                                "--clobber",
+                            ],
+                            check=True,
+                        )
+                    if name in s3_meta:
+                        s3_upload(
+                            sidecar, s3_key(pypi_tag, f"{name}.metadata")
+                        )
 
 
 def collect_package_wheels(package_name: str) -> list[dict]:
-    """Collect wheel download URLs for a package from pypi repo releases."""
+    """Collect wheel download URLs for a package from pypi repo releases.
+
+    Each returned dict carries ``filename`` and ``url``, plus
+    ``core_metadata`` — the PEP 714 ``data-core-metadata`` attribute value
+    for the wheel's ``.metadata`` sidecar, or None when no sidecar exists.
+    """
     normalized = normalize_name(package_name)
     whl_prefix = normalized.replace("-", "_") + "-"
 
@@ -170,14 +301,27 @@ def collect_package_wheels(package_name: str) -> list[dict]:
 
     for release in releases:
         tag = release["tag_name"]
-        for asset in release.get("assets", []):
-            name = asset["name"]
-            if name.endswith(".whl") and name.startswith(whl_prefix):
+        assets = {a["name"]: a for a in release.get("assets", [])}
+        for name, asset in assets.items():
+            if not (name.endswith(".whl") and name.startswith(whl_prefix)):
+                continue
+            if S3_BASE_URL:
+                # Serve wheel bytes from the object store, off the flaky github
+                # release-asset CDN. pip derives the PEP 658 metadata URL as
+                # <href>.metadata, so the sidecar must live at the matching key.
+                url = f"{S3_BASE_URL}/{quote(s3_key(tag, name))}"
+            else:
                 url = (
                     f"https://github.com/{PYPI_REPO}"
                     f"/releases/download/{tag}/{quote(name)}"
                 )
-                wheels.append({"filename": name, "url": url})
+            wheels.append({
+                "filename": name,
+                "url": url,
+                "core_metadata": core_metadata_value(
+                    assets.get(f"{name}.metadata")
+                ),
+            })
 
     return wheels
 
@@ -192,7 +336,12 @@ def generate_package_index(
 
     links = []
     for wheel in sorted(wheels, key=lambda w: w["filename"]):
-        links.append(f'    <a href="{wheel["url"]}">{wheel["filename"]}</a>')
+        attr = ""
+        if wheel.get("core_metadata"):
+            attr = f' data-core-metadata="{wheel["core_metadata"]}"'
+        links.append(
+            f'    <a href="{wheel["url"]}"{attr}>{wheel["filename"]}</a>'
+        )
 
     html = (
         "<!DOCTYPE html>\n"

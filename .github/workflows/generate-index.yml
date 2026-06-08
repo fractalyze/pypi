@@ -47,6 +47,15 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           FRACTALYZE_REPOS_READ_TOKEN: ${{ secrets.FRACTALYZE_REPOS_READ_TOKEN }}
+          # Optional S3 wheel hosting. When PYPI_WHEELS_BUCKET is unset, the
+          # script keeps emitting github release-asset hrefs (no S3 calls), so
+          # this workflow is a no-op change until the bucket + creds are set.
+          # aws CLI is preinstalled on ubuntu-latest runners.
+          PYPI_WHEELS_BUCKET: ${{ vars.PYPI_WHEELS_BUCKET }}
+          PYPI_WHEELS_BASE_URL: ${{ vars.PYPI_WHEELS_BASE_URL }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.PYPI_WHEELS_AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.PYPI_WHEELS_AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: ${{ vars.PYPI_WHEELS_REGION || 'ap-northeast-2' }}
         run: python3 generate_index.py
 
       - name: Setup Pages
