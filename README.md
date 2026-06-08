@@ -28,16 +28,23 @@ uploading wheels to their releases.
 ### Wheel hosting
 
 The index emits a [PEP 658](https://peps.python.org/pep-0658/) `.metadata`
-sidecar (`data-core-metadata`) for every wheel, so `pip-compile` / `pip`
-resolve dependency metadata without downloading rejected-candidate wheels.
+sidecar (`data-core-metadata`), so `pip-compile` / `pip` resolve dependency
+metadata without downloading rejected-candidate wheels.
 
 By default wheel `href`s point at this repo's github release assets. Setting
 `PYPI_WHEELS_BUCKET` + `PYPI_WHEELS_BASE_URL` (see the workflow env) makes
-`generate_index.py` also upload each wheel + sidecar to that S3 bucket and emit
+`generate_index.py` also upload the wheel + sidecar to that S3 bucket and emit
 the bucket URL as the `href`, keeping consumers off the github release-asset
 CDN (which intermittently `504`s on large wheels). The bucket is provisioned by
 `pypi/01-wheels-bucket.sh` in `fractalyze/rbe-infra`. The github release mirror
 still runs as the enumeration source and a durable backup.
+
+Sidecars + S3 copies are bounded to the newest `PYPI_WHEELS_BACKFILL_LAST`
+source releases per repo (default 10; `0` = all). The github mirror holds every
+wheel ever built (~100 GB of mostly stale daily-dev builds); backfilling all of
+it to S3 would haul the whole ~100 GB on the first run. Older wheels keep their
+github href and resolve as before — an S3 href is emitted only where a sidecar
+exists, so the index never points at a wheel the bucket doesn't have.
 
 ## Adding a new package
 

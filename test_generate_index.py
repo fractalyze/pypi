@@ -162,6 +162,23 @@ class CollectPackageWheelsHref(unittest.TestCase):
         # Sidecar hash is host-independent; pip derives <href>.metadata on S3.
         self.assertEqual(w["core_metadata"], "sha256=" + "d" * 64)
 
+    def test_github_href_when_bucket_set_but_no_sidecar(self):
+        # A wheel outside the recency bound has no sidecar → not backfilled to
+        # S3 → must keep its github href even when the bucket is configured,
+        # else the S3 href would 404.
+        gi.gh_api = lambda endpoint, **kw: [{
+            "tag_name": "jax-dev-old",
+            "assets": [{"name": "jax-0.1-py3-none-any.whl"}],  # no .metadata
+        }]
+        gi.S3_BASE_URL = "https://b.s3.ap-northeast-2.amazonaws.com"
+        (w,) = gi.collect_package_wheels("jax")
+        self.assertEqual(
+            w["url"],
+            "https://github.com/fractalyze/pypi/releases/download/"
+            "jax-dev-old/jax-0.1-py3-none-any.whl",
+        )
+        self.assertIsNone(w["core_metadata"])
+
 
 if __name__ == "__main__":
     unittest.main()

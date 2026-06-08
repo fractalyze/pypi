@@ -49,6 +49,16 @@ SOURCE_TOKEN_ENV = "FRACTALYZE_REPOS_READ_TOKEN"
 S3_BUCKET = os.environ.get("PYPI_WHEELS_BUCKET")
 S3_BASE_URL = (os.environ.get("PYPI_WHEELS_BASE_URL") or "").rstrip("/")
 
+# Recency bound on the PEP 658 sidecar + S3 backfill. The github release mirror
+# holds every wheel ever built (thousands; ~100 GB), almost all stale daily-dev
+# builds. Re-downloading each to extract METADATA and pushing it to S3 would haul
+# the whole ~100 GB on the first run. Bound it: only the newest
+# PYPI_WHEELS_BACKFILL_LAST source releases per repo get sidecars + S3 copies.
+# Older wheels keep their github-asset href (no sidecar) and resolve as before.
+# 0 disables the bound (backfill everything). The github wheel mirror itself is
+# never bounded — it stays the complete enumeration source.
+BACKFILL_LAST = int(os.environ.get("PYPI_WHEELS_BACKFILL_LAST", "10"))
+
 
 def _make_env(token_env: str) -> dict[str, str]:
     """Build subprocess environment with GH_TOKEN set from *token_env*."""
@@ -162,7 +172,10 @@ def mirror_repo_wheels(repo: str) -> None:
         f"repos/{repo}/releases", token_env=SOURCE_TOKEN_ENV
     )
 
-    for release in source_releases:
+    # gh returns releases newest-first, so the first BACKFILL_LAST are the most
+    # recent — the only ones that get sidecars + S3 copies (see BACKFILL_LAST).
+    for idx, release in enumerate(source_releases):
+        recent = BACKFILL_LAST == 0 or idx < BACKFILL_LAST
         source_tag = release["tag_name"]
         pypi_tag = f"{prefix}-{source_tag}"
 
@@ -188,27 +201,36 @@ def mirror_repo_wheels(repo: str) -> None:
         # PEP 658 ``<wheel>.metadata`` sidecar. They are tracked
         # independently because a wheel mirrored before sidecars existed has
         # the wheel but no sidecar — that case backfills the sidecar alone.
+        # The github wheel mirror is never bounded — it is the enumeration
+        # source, so every release keeps its wheel asset.
         upload_wheel = {
             w["name"] for w in wheels if w["name"] not in existing_names
         }
-        upload_meta = {
-            w["name"] for w in wheels
-            if f"{w['name']}.metadata" not in existing_names
-        }
-        # When S3 hosting is on, the bucket needs the same two objects. A wheel
-        # already on github may still be absent from S3 (e.g. first rollout), so
-        # check the bucket independently of the github asset listing.
+        # Sidecars and S3 copies are bounded to recent releases. Older releases
+        # keep their plain github-asset href; phase 2 emits an S3 href only where
+        # a sidecar exists, so the two stay consistent without a bucket listing.
+        upload_meta: set[str] = set()
         s3_wheel: set[str] = set()
         s3_meta: set[str] = set()
-        if S3_BUCKET:
-            s3_wheel = {
+        if recent:
+            upload_meta = {
                 w["name"] for w in wheels
-                if not s3_object_exists(s3_key(pypi_tag, w["name"]))
+                if f"{w['name']}.metadata" not in existing_names
             }
-            s3_meta = {
-                w["name"] for w in wheels
-                if not s3_object_exists(s3_key(pypi_tag, f"{w['name']}.metadata"))
-            }
+            # When S3 hosting is on, the bucket needs the same two objects. A
+            # wheel already on github may still be absent from S3 (e.g. first
+            # rollout), so check the bucket independently of the asset listing.
+            if S3_BUCKET:
+                s3_wheel = {
+                    w["name"] for w in wheels
+                    if not s3_object_exists(s3_key(pypi_tag, w["name"]))
+                }
+                s3_meta = {
+                    w["name"] for w in wheels
+                    if not s3_object_exists(
+                        s3_key(pypi_tag, f"{w['name']}.metadata")
+                    )
+                }
         # Extracting METADATA needs the wheel bytes, so any wheel missing any
         # target (github or S3, wheel or sidecar) is downloaded once and reused.
         to_download = sorted(upload_wheel | upload_meta | s3_wheel | s3_meta)
@@ -305,10 +327,14 @@ def collect_package_wheels(package_name: str) -> list[dict]:
         for name, asset in assets.items():
             if not (name.endswith(".whl") and name.startswith(whl_prefix)):
                 continue
-            if S3_BASE_URL:
-                # Serve wheel bytes from the object store, off the flaky github
-                # release-asset CDN. pip derives the PEP 658 metadata URL as
-                # <href>.metadata, so the sidecar must live at the matching key.
+            sidecar = assets.get(f"{name}.metadata")
+            # A sidecar is uploaded together with the S3 copy (same recency
+            # bound), so its presence means the wheel was backfilled to S3.
+            # Emit the S3 href only then; otherwise the bytes are not in the
+            # bucket and the wheel keeps its github-asset href.
+            if S3_BASE_URL and sidecar is not None:
+                # pip derives the PEP 658 metadata URL as <href>.metadata, so
+                # the sidecar must live at the matching key in the bucket.
                 url = f"{S3_BASE_URL}/{quote(s3_key(tag, name))}"
             else:
                 url = (
@@ -318,9 +344,7 @@ def collect_package_wheels(package_name: str) -> list[dict]:
             wheels.append({
                 "filename": name,
                 "url": url,
-                "core_metadata": core_metadata_value(
-                    assets.get(f"{name}.metadata")
-                ),
+                "core_metadata": core_metadata_value(sidecar),
             })
 
     return wheels
