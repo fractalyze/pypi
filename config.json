@@ -7,8 +7,10 @@
     {"name": "jax-rocm7-plugin", "repo": "fractalyze/jax_fork"},
     {"name": "jaxlib", "repo": "fractalyze/jax"},
     {"name": "riscv-witness", "repo": "fractalyze/riscv-witness"},
+    {"name": "sp1-zorch", "repo": "fractalyze/sp1-zorch"},
     {"name": "whir-zorch", "repo": "fractalyze/whir-zorch"},
     {"name": "zkx-cuda-pjrt", "repo": "fractalyze/jax"},
-    {"name": "zkbench", "repo": "fractalyze/zkbench-py"}
+    {"name": "zkbench", "repo": "fractalyze/zkbench-py"},
+    {"name": "zorch", "repo": "fractalyze/zorch"}
   ]
 }
