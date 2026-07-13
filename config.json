@@ -1,5 +1,9 @@
 {
   "packages": [
+    {"name": "frx", "repo": "fractalyze/jax"},
+    {"name": "frx-cuda12-pjrt", "repo": "fractalyze/jax"},
+    {"name": "frx-cuda12-plugin", "repo": "fractalyze/jax"},
+    {"name": "frxlib", "repo": "fractalyze/jax"},
     {"name": "jax", "repo": "fractalyze/jax"},
     {"name": "jax-cuda12-pjrt", "repo": "fractalyze/jax_fork"},
     {"name": "jax-cuda12-plugin", "repo": "fractalyze/jax"},
