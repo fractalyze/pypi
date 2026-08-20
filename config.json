@@ -11,6 +11,7 @@
     {"name": "jax-rocm7-pjrt", "repo": "fractalyze/jax_fork"},
     {"name": "jax-rocm7-plugin", "repo": "fractalyze/jax_fork"},
     {"name": "jaxlib", "repo": "fractalyze/jax"},
+    {"name": "lattice-frx", "repo": "fractalyze/lattice-frx"},
     {"name": "riscv-witness", "repo": "fractalyze/riscv-witness"},
     {"name": "rw-constraints", "repo": "fractalyze/riscv-witness"},
     {"name": "sp1-zorch", "repo": "fractalyze/sp1-zorch"},
