@@ -1,80 +1,23 @@
 {
   "packages": [
-    {
-      "name": "frx",
-      "repo": "fractalyze/jax"
-    },
-    {
-      "name": "frx-cuda12-pjrt",
-      "repo": "fractalyze/jax"
-    },
-    {
-      "name": "frx-cuda12-plugin",
-      "repo": "fractalyze/jax"
-    },
-    {
-      "name": "frxlib",
-      "repo": "fractalyze/jax"
-    },
-    {
-      "name": "hash-frx",
-      "repo": "fractalyze/hash-frx"
-    },
-    {
-      "name": "jax",
-      "repo": "fractalyze/jax"
-    },
-    {
-      "name": "jax-cuda12-pjrt",
-      "repo": "fractalyze/jax_fork"
-    },
-    {
-      "name": "jax-cuda12-plugin",
-      "repo": "fractalyze/jax"
-    },
-    {
-      "name": "jax-rocm7-pjrt",
-      "repo": "fractalyze/jax_fork"
-    },
-    {
-      "name": "jax-rocm7-plugin",
-      "repo": "fractalyze/jax_fork"
-    },
-    {
-      "name": "jaxlib",
-      "repo": "fractalyze/jax"
-    },
-    {
-      "name": "lattice-frx",
-      "repo": "fractalyze/lattice-frx"
-    },
-    {
-      "name": "riscv-witness",
-      "repo": "fractalyze/riscv-witness"
-    },
-    {
-      "name": "rw-constraints",
-      "repo": "fractalyze/riscv-witness"
-    },
-    {
-      "name": "sp1-zorch",
-      "repo": "fractalyze/sp1-zorch"
-    },
-    {
-      "name": "whir-zorch",
-      "repo": "fractalyze/whir-zorch"
-    },
-    {
-      "name": "zkx-cuda-pjrt",
-      "repo": "fractalyze/jax"
-    },
-    {
-      "name": "zkbench",
-      "repo": "fractalyze/zkbench-py"
-    },
-    {
-      "name": "zorch",
-      "repo": "fractalyze/zorch"
-    }
+    {"name": "frx", "repo": "fractalyze/jax"},
+    {"name": "frx-cuda12-pjrt", "repo": "fractalyze/jax"},
+    {"name": "frx-cuda12-plugin", "repo": "fractalyze/jax"},
+    {"name": "frxlib", "repo": "fractalyze/jax"},
+    {"name": "hash-frx", "repo": "fractalyze/hash-frx"},
+    {"name": "jax", "repo": "fractalyze/jax"},
+    {"name": "jax-cuda12-pjrt", "repo": "fractalyze/jax_fork"},
+    {"name": "jax-cuda12-plugin", "repo": "fractalyze/jax"},
+    {"name": "jax-rocm7-pjrt", "repo": "fractalyze/jax_fork"},
+    {"name": "jax-rocm7-plugin", "repo": "fractalyze/jax_fork"},
+    {"name": "jaxlib", "repo": "fractalyze/jax"},
+    {"name": "lattice-frx", "repo": "fractalyze/lattice-frx"},
+    {"name": "riscv-witness", "repo": "fractalyze/riscv-witness"},
+    {"name": "rw-constraints", "repo": "fractalyze/riscv-witness"},
+    {"name": "sp1-zorch", "repo": "fractalyze/sp1-zorch"},
+    {"name": "whir-zorch", "repo": "fractalyze/whir-zorch"},
+    {"name": "zkx-cuda-pjrt", "repo": "fractalyze/jax"},
+    {"name": "zkbench", "repo": "fractalyze/zkbench-py"},
+    {"name": "zorch", "repo": "fractalyze/zorch"}
   ]
 }
